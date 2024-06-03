@@ -103,6 +103,7 @@ struct SimpleLogConsumer {
 impl AppendVecConsumer for SimpleLogConsumer {
     async fn on_append_vec(&mut self, append_vec: AppendVec) -> anyhow::Result<()> {
         info!("size: {:?}", append_vec.len());
+        info!("slot: {:?}", append_vec.slot());
         for handle in append_vec_iter(&append_vec) {
             let stored = handle.access().unwrap();
             info!("account {:?}: {}", stored.meta.pubkey, stored.account_meta.lamports);
