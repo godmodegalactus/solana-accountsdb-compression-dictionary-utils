@@ -19,6 +19,15 @@ use {
         sync::Arc,
     },
 };
+use clap::Parser;
+
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct Args {
+    #[arg(long)]
+    pub snapshot_archive_path: String,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -26,7 +35,9 @@ async fn main() -> anyhow::Result<()> {
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
     );
 
-    let archive_path = PathBuf::from_str("/Users/stefan/mango/projects/snapshot-reader/snapshot-78017-6vfFEs6YnFZPfPRBPnjqgMN8UmE5jnpBGscKXsPCtdV7.tar.zst").unwrap();
+    let Args { snapshot_archive_path } = Args::parse();
+
+    let archive_path = PathBuf::from_str(snapshot_archive_path.as_str()).unwrap();
 
     let mut loader: ArchiveSnapshotExtractor<File> = ArchiveSnapshotExtractor::open(&archive_path).unwrap();
 
