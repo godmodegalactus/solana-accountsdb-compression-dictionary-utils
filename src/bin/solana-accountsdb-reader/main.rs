@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use log::warn;
@@ -20,6 +21,9 @@ use {
     },
 };
 use clap::Parser;
+use itertools::Itertools;
+use solana_sdk::clock::Slot;
+use solana_sdk::pubkey::Pubkey;
 
 
 #[derive(Parser, Debug)]
@@ -41,22 +45,37 @@ async fn main() -> anyhow::Result<()> {
 
     let mut loader: ArchiveSnapshotExtractor<File> = ArchiveSnapshotExtractor::open(&archive_path).unwrap();
 
-    // for vec in loader.iter() {
-    //     let append_vec =  vec.unwrap();
-    //     info!("size: {:?}", append_vec.len());
-    //     for handle in append_vec_iter(&append_vec) {
-    //         let stored = handle.access().unwrap();
-    //         info!("account {:?}: {}", stored.meta.pubkey, stored.account_meta.lamports);
-    //     }
-    // }
+    let mut accounts_per_slot: HashMap<Slot, u64> = HashMap::new();
+    let mut updates: HashMap<Pubkey, Vec<Slot>> = HashMap::new();
 
-    par_iter_append_vecs(
-        loader.iter(),
-        || SimpleLogConsumer {
-        },
-        4,
-    )
-        .await?;
+
+    for vec in loader.iter() {
+        let append_vec =  vec.unwrap();
+        // info!("size: {:?}", append_vec.len());
+        for handle in append_vec_iter(&append_vec) {
+            let stored = handle.access().unwrap();
+            // info!("account {:?}: {}", stored.meta.pubkey, stored.account_meta.lamports);
+            let zzz = accounts_per_slot.entry(append_vec.slot()).or_default();
+            *zzz += 1;
+
+            updates.entry(stored.meta.pubkey).or_default().push(append_vec.slot());
+        }
+    }
+
+    for (slot, count) in accounts_per_slot.iter().sorted_by_key(|(slot, _)| *slot).take(100) {
+        info!("slot: {:?} count: {:?}", slot, count);
+    }
+
+    for (pubkey, slots) in updates.iter().filter(|(_, slots)| slots.len() > 1) {
+        info!("pubkey: {:?} slots: {:?}", pubkey, slots);
+    }
+
+    for (count, group) in &updates.into_iter().map(|(pubkey, slots)| (pubkey, slots.len()))
+        .sorted_by_key(|(_, count)| *count)
+        .group_by(|(pubkey, count)| *count) {
+        info!("count: {:?} groupsize: {}", count, group.count());
+    }
+
 
     Ok(())
 }
@@ -117,7 +136,7 @@ impl AppendVecConsumer for SimpleLogConsumer {
         info!("slot: {:?}", append_vec.slot());
         for handle in append_vec_iter(&append_vec) {
             let stored = handle.access().unwrap();
-            info!("account {:?}: {}", stored.meta.pubkey, stored.account_meta.lamports);
+            info!("account {:?}: {} at slot {}", stored.meta.pubkey, stored.account_meta.lamports, append_vec.slot());
         }
         Ok(())
     }
