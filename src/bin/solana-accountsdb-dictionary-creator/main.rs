@@ -29,6 +29,9 @@ pub struct Args {
     #[arg(short = 'd', long, default_value_t = 1024)]
     pub dictionary_size_per_program: usize,
 
+    #[arg(short = 'm', long, default_value_t = 1024 * 1024 * 1024)] // 1gb
+    pub max_sample_vector_length: usize,
+
     #[arg(short = 'o', long, default_value_t = String::from("dictionary.bin"))]
     pub out_dictionary: String,
 }
@@ -65,6 +68,7 @@ pub fn main() -> anyhow::Result<()> {
         sample_size,
         dictionary_size_per_program,
         out_dictionary,
+        max_sample_vector_length,
     } = Args::parse();
 
     let archive_path = PathBuf::from_str(snapshot_archive_path.as_str()).unwrap();
@@ -91,7 +95,9 @@ pub fn main() -> anyhow::Result<()> {
             match samples.entry(key) {
                 std::collections::hash_map::Entry::Occupied(mut occ) => {
                     let val = occ.get_mut();
-                    if val.sizes.len() >= sample_size || val.samples.len() + data_len >= 990_000_000 {
+                    if val.sizes.len() >= sample_size
+                        || val.samples.len() + data_len >= max_sample_vector_length
+                    {
                         continue;
                     }
                     val.add(data);
