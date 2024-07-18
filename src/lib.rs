@@ -13,9 +13,9 @@ use {
 pub mod append_vec;
 pub mod archived;
 pub mod parallel;
+pub mod partial_pubkey;
 pub mod solana;
 pub mod unpacked;
-pub mod partial_pubkey;
 
 const SNAPSHOTS_DIR: &str = "snapshots";
 

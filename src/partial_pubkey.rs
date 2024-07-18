@@ -11,10 +11,9 @@ impl<'de, const SIZE: usize, const OFFSET: usize> Deserialize<'de> for PartialPu
     where
         D: serde::Deserializer<'de>,
     {
-        struct BytesVisitor<const SIZE: usize> {
-        }
+        struct BytesVisitor<const SIZE: usize> {}
 
-        impl<'de,  const SIZE: usize> Visitor<'de> for BytesVisitor<SIZE> {
+        impl<'de, const SIZE: usize> Visitor<'de> for BytesVisitor<SIZE> {
             type Value = [u8; SIZE];
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -22,12 +21,13 @@ impl<'de, const SIZE: usize, const OFFSET: usize> Deserialize<'de> for PartialPu
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-                where
-                    E: serde::de::Error, {
+            where
+                E: serde::de::Error,
+            {
                 Ok(v[0..SIZE].try_into().unwrap())
             }
-        }   
-        let bytes = deserializer.deserialize_bytes(BytesVisitor{})?;
+        }
+        let bytes = deserializer.deserialize_bytes(BytesVisitor {})?;
         Ok(Self(bytes))
     }
 }
@@ -43,13 +43,13 @@ impl<const SIZE: usize, const OFFSET: usize> Serialize for PartialPubkey<SIZE, O
 
 impl<const SIZE: usize, const OFFSET: usize> From<Pubkey> for PartialPubkey<SIZE, OFFSET> {
     fn from(value: Pubkey) -> Self {
-        Self(value.to_bytes()[OFFSET..OFFSET+SIZE].try_into().unwrap())
+        Self(value.to_bytes()[OFFSET..OFFSET + SIZE].try_into().unwrap())
     }
 }
 
 impl<const SIZE: usize, const OFFSET: usize> From<&Pubkey> for PartialPubkey<SIZE, OFFSET> {
     fn from(value: &Pubkey) -> Self {
-        Self(value.to_bytes()[OFFSET..OFFSET+SIZE].try_into().unwrap())
+        Self(value.to_bytes()[OFFSET..OFFSET + SIZE].try_into().unwrap())
     }
 }
 
