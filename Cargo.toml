@@ -1,5 +1,5 @@
 [package]
-name = "solana-accountsdb-reader"
+name = "solana-accountsdb-compression-dictionary-utils"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
@@ -30,8 +30,10 @@ sha2 = "0.10.7"
 tar = "0.4.38"
 thiserror = "1.0.31"
 tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros"]}
-zstd = "0.11.2"
+zstd = "0.13.2"
 clap = { version = "4.5.4", features = ["derive"] }
+lz4_flex = "0.11.3"
+bs58 = "0.4.0"
 
 [lints.clippy]
 clone_on_ref_ptr = "deny"
