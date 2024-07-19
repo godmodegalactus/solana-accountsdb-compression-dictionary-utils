@@ -3121,6 +3121,7 @@ dependencies = [
  "futures",
  "itertools",
  "log",
+ "lz4",
  "lz4_flex",
  "memmap2",
  "num_cpus",

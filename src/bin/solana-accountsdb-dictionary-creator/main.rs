@@ -143,13 +143,13 @@ pub fn main() -> anyhow::Result<()> {
     let dictionary = bincode::serialize(&dictionaries).unwrap();
     std::fs::write(out_dictionary, dictionary).unwrap();
 
-    println!("following programs are not included");
-    for program_id in all_program_ids {
-        if !dictionaries.contains_key(&program_id) {
-            let encoder = bs58::encode(program_id.to_bytes().to_vec());
-            println!("{}", encoder.into_string());
-        }
-    }
+    // println!("following programs are not included");
+    // for program_id in all_program_ids {
+    //     if !dictionaries.contains_key(&program_id) {
+    //         let encoder = bs58::encode(program_id.to_bytes().to_vec());
+    //         println!("{}", encoder.into_string());
+    //     }
+    // }
 
     Ok(())
 }
