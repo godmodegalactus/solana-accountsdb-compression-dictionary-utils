@@ -24,6 +24,10 @@ pub struct Args {
 
     #[arg(short = 's', long)]
     pub lz4_compression: Option<i32>,
+
+
+    #[arg(short = 'm', long)]
+    pub max_number_of_accounts: Option<u64>,
 }
 
 pub fn main() -> anyhow::Result<()> {
@@ -35,6 +39,7 @@ pub fn main() -> anyhow::Result<()> {
         snapshot_archive_path,
         dictionary,
         lz4_compression,
+        max_number_of_accounts,
     } = Args::parse();
     // loading dictionary
     let dictionary = match dictionary {
@@ -62,7 +67,10 @@ pub fn main() -> anyhow::Result<()> {
     let mut decompression_errors: usize = 0;
     let mut time_compression: Duration = Duration::from_micros(0);
     let mut time_decompression: Duration = Duration::from_micros(0);
+    let mut account_total: u64 = 0;
 
+
+    let max_number_of_accounts = max_number_of_accounts.unwrap_or(u64::MAX);
     let max_account_size = 16 * 1024 * 1024;
     let mut buf = vec![0; max_account_size]; // 64MB;
     for vec in loader.iter() {
@@ -76,6 +84,12 @@ pub fn main() -> anyhow::Result<()> {
                 continue;
             }
             let dict_iter = dictionary.get(&stored.account_meta.owner.into());
+            account_total+=1;
+            if account_total > max_number_of_accounts {
+                break;
+            }
+
+            log::debug!("{account_total:?}", );
             let compressed = match dict_iter {
                 Some(dict_data) => {
                     accounts_with_dict += 1;
