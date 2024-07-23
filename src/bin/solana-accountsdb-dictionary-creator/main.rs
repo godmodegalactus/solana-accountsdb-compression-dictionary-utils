@@ -1,7 +1,5 @@
 use clap::Parser;
-use itertools::Itertools;
 use solana_sdk::pubkey::Pubkey;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use {
@@ -11,7 +9,6 @@ use {
         append_vec_iter,
         archived::ArchiveSnapshotExtractor,
         parallel::AppendVecConsumer,
-        partial_pubkey::{DictionaryMap, PartialPubkey},
         SnapshotExtractor,
     },
     std::fs::File,
@@ -23,7 +20,7 @@ pub struct Args {
     #[arg(short = 'a', long)]
     pub snapshot_archive_path: String,
 
-    #[arg(short = 's', long, default_value_t = 100_000)]
+    #[arg(short = 's', long, default_value_t = 2_000_000)]
     pub sample_size: usize,
 
     #[arg(short = 'd', long, default_value_t = 1024)]
@@ -36,6 +33,7 @@ pub struct Args {
     pub out_dictionary: String,
 }
 
+#[derive(Default)]
 struct Samples {
     pub samples: Vec<u8>,
     pub sizes: Vec<usize>,
@@ -43,7 +41,7 @@ struct Samples {
 }
 
 impl Samples {
-    pub fn new(data: &[u8]) -> Self {
+    pub fn _new(data: &[u8]) -> Self {
         Self {
             samples: data.to_vec(),
             sizes: vec![data.len()],
@@ -63,6 +61,9 @@ pub fn main() -> anyhow::Result<()> {
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
     );
 
+    let args = Args::parse();
+    println!("creator parameters are : {args:?}");
+
     let Args {
         snapshot_archive_path,
         sample_size,
@@ -76,7 +77,7 @@ pub fn main() -> anyhow::Result<()> {
     let mut loader: ArchiveSnapshotExtractor<File> =
         ArchiveSnapshotExtractor::open(&archive_path).unwrap();
 
-    let mut samples: HashMap<PartialPubkey<4>, Samples> = HashMap::new();
+    let mut samples: Samples = Samples::default();
 
     let mut counter = 0u64;
     for vec in loader.iter() {
@@ -86,61 +87,32 @@ pub fn main() -> anyhow::Result<()> {
             counter += 1;
             let stored = handle.access().unwrap();
             let data_len = stored.meta.data_len as usize;
-            if stored.account_meta.owner == Pubkey::default() || stored.meta.data_len < 8 {
+            if stored.account_meta.owner == Pubkey::default() || data_len < 1024 {
                 continue;
             }
-
-            let data = stored.data;
-            let key = stored.account_meta.owner.into();
-            match samples.entry(key) {
-                std::collections::hash_map::Entry::Occupied(mut occ) => {
-                    let val = occ.get_mut();
-                    if val.sizes.len() >= sample_size
-                        || val.samples.len() + data_len >= max_sample_vector_length
-                    {
-                        continue;
-                    }
-                    val.add(data);
-                }
-                std::collections::hash_map::Entry::Vacant(vac) => {
-                    vac.insert(Samples::new(data));
-                }
-            };
+ 
+            if samples.sizes.len() >= sample_size
+                || samples.samples.len() + data_len >= max_sample_vector_length
+            {
+                break;
+            }
+            samples.add(stored.data);
         }
     }
     println!("iterated over : {} accounts", counter);
-    let all_program_ids = samples.iter().map(|x| *x.0).collect_vec();
 
-    let mut dictionaries = DictionaryMap::new();
-    for (key, ite_sample) in samples.drain() {
-        if ite_sample.sizes.len() < 32 {
-            continue;
+    let dict = match zstd::dict::from_continuous(
+        &samples.samples,
+        &samples.sizes,
+        dictionary_size_per_program,
+    ) {
+        Ok(v) => v,
+        Err(_e) => {
+            log::error!("colud not create dictioanry");
+            anyhow::bail!("failed to create dictionary");
         }
-
-        let dict = match zstd::dict::from_continuous(
-            &ite_sample.samples,
-            &ite_sample.sizes,
-            dictionary_size_per_program,
-        ) {
-            Ok(v) => v,
-            Err(e) => {
-                println!(
-                    "error {}, ite_sample: {}, number of samples: {}",
-                    e,
-                    ite_sample.samples.len(),
-                    ite_sample.sizes.len()
-                );
-                continue;
-            }
-        };
-        dictionaries.insert(key, dict);
-    }
-    println!(
-        "program ids in dictionaries : {}/{}",
-        dictionaries.len(),
-        all_program_ids.len()
-    );
-    let dictionary = bincode::serialize(&dictionaries).unwrap();
+    };
+    let dictionary = bincode::serialize(&dict).unwrap();
     std::fs::write(out_dictionary, dictionary).unwrap();
 
     // println!("following programs are not included");

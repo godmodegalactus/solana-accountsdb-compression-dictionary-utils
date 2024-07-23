@@ -8,7 +8,7 @@ use std::{
 use clap::Parser;
 use lz4::block::CompressionMode;
 use solana_accountsdb_compression_dictionary_utils::{
-    append_vec_iter, archived::ArchiveSnapshotExtractor, partial_pubkey::DictionaryMap,
+    append_vec_iter, archived::ArchiveSnapshotExtractor,
     SnapshotExtractor,
 };
 
@@ -35,22 +35,25 @@ pub fn main() -> anyhow::Result<()> {
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
     );
 
+    let args = Args::parse();
+    println!("tester parameters are : {args:?}");
+
     let Args {
         snapshot_archive_path,
         dictionary,
         lz4_compression,
         max_number_of_accounts,
-    } = Args::parse();
+    } = args;
     // loading dictionary
     let dictionary = match dictionary {
         Some(dictionary_path) => {
             let dictionary_binary = std::fs::read(dictionary_path).unwrap();
-            let dictionary = bincode::deserialize::<DictionaryMap>(&dictionary_binary).unwrap();
+            let dictionary = bincode::deserialize::<Vec<u8>>(&dictionary_binary).unwrap();
             drop(dictionary_binary);
-            dictionary
+            Some(dictionary)
         },
         None => {
-            DictionaryMap::new()
+            None
         }
     };
 
@@ -83,21 +86,20 @@ pub fn main() -> anyhow::Result<()> {
                 total_size_uncompressed += stored.meta.data_len as usize;
                 continue;
             }
-            let dict_iter = dictionary.get(&stored.account_meta.owner.into());
             account_total+=1;
             if account_total > max_number_of_accounts {
                 break;
             }
 
             log::debug!("{account_total:?}", );
-            let compressed = match dict_iter {
+            let compressed = match &dictionary {
                 Some(dict_data) => {
                     accounts_with_dict += 1;
                     let instant = Instant::now();
                     match lz4_flex::block::compress_into_with_dict(
                         stored.data,
                         buf.as_mut_slice(),
-                        dict_data,
+                        &dict_data,
                     ) {
                         Ok(size) => {
                             time_compression += instant.elapsed();
@@ -138,13 +140,13 @@ pub fn main() -> anyhow::Result<()> {
                 }
             };
 
-            let decompressed = match dict_iter {
+            let decompressed = match &dictionary {
                 Some(dictionary) => {
                     let instant = Instant::now();
                     match lz4_flex::block::decompress_into_with_dict(
                         &compressed,
                         buf.as_mut_slice(),
-                        dictionary,
+                        &dictionary,
                     ) {
                         Ok(size) => {
                             time_decompression += instant.elapsed();
