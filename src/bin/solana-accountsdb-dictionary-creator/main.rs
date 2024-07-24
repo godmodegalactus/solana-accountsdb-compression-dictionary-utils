@@ -7,12 +7,9 @@ use std::str::FromStr;
 use {
     log::info,
     solana_accountsdb_compression_dictionary_utils::{
-        append_vec::AppendVec,
-        append_vec_iter,
-        archived::ArchiveSnapshotExtractor,
-        parallel::AppendVecConsumer,
+        append_vec::AppendVec, append_vec_iter, archived::ArchiveSnapshotExtractor,
+        parallel::AppendVecConsumer, partial_pubkey_by_bits::PartialPubkeyByBits,
         SnapshotExtractor,
-        partial_pubkey_by_bits::PartialPubkeyByBits,
     },
     std::fs::File,
 };
@@ -23,7 +20,7 @@ pub struct Args {
     #[arg(short = 'a', long)]
     pub snapshot_archive_path: String,
 
-    #[arg(short = 's', long, default_value_t = 100_000)]
+    #[arg(short = 's', long, default_value_t = 10_000_000)]
     pub sample_size: usize,
 
     #[arg(short = 'd', long, default_value_t = 1024)]

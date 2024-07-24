@@ -14,9 +14,9 @@ pub mod append_vec;
 pub mod archived;
 pub mod parallel;
 pub mod partial_pubkey;
+pub mod partial_pubkey_by_bits;
 pub mod solana;
 pub mod unpacked;
-pub mod partial_pubkey_by_bits;
 
 const SNAPSHOTS_DIR: &str = "snapshots";
 
