@@ -11,8 +11,8 @@ use {
         append_vec_iter,
         archived::ArchiveSnapshotExtractor,
         parallel::AppendVecConsumer,
-        partial_pubkey::{DictionaryMap, PartialPubkey},
         SnapshotExtractor,
+        partial_pubkey_by_bits::PartialPubkeyByBits,
     },
     std::fs::File,
 };
@@ -34,6 +34,9 @@ pub struct Args {
 
     #[arg(short = 'o', long, default_value_t = String::from("dictionary.bin"))]
     pub out_dictionary: String,
+
+    #[arg(short = 'n', long, default_value_t = 8)]
+    pub number_of_bits_of_pubkey: u8,
 }
 
 struct Samples {
@@ -58,10 +61,15 @@ impl Samples {
     }
 }
 
+type DictionaryMap = HashMap<PartialPubkeyByBits, Vec<u8>>;
+
 pub fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
     );
+
+    let args = Args::parse();
+    println!("tester args : {:?}", args);
 
     let Args {
         snapshot_archive_path,
@@ -69,14 +77,15 @@ pub fn main() -> anyhow::Result<()> {
         dictionary_size_per_program,
         out_dictionary,
         max_sample_vector_length,
-    } = Args::parse();
+        number_of_bits_of_pubkey,
+    } = args;
 
     let archive_path = PathBuf::from_str(snapshot_archive_path.as_str()).unwrap();
 
     let mut loader: ArchiveSnapshotExtractor<File> =
         ArchiveSnapshotExtractor::open(&archive_path).unwrap();
 
-    let mut samples: HashMap<PartialPubkey<4>, Samples> = HashMap::new();
+    let mut samples: HashMap<PartialPubkeyByBits, Samples> = HashMap::new();
 
     let mut counter = 0u64;
     for vec in loader.iter() {
@@ -91,7 +100,7 @@ pub fn main() -> anyhow::Result<()> {
             }
 
             let data = stored.data;
-            let key = stored.account_meta.owner.into();
+            let key = PartialPubkeyByBits::new(stored.account_meta.owner, number_of_bits_of_pubkey);
             match samples.entry(key) {
                 std::collections::hash_map::Entry::Occupied(mut occ) => {
                     let val = occ.get_mut();

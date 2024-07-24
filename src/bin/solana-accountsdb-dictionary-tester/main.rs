@@ -1,15 +1,12 @@
 use std::{
-    fs::File,
-    path::PathBuf,
-    str::FromStr,
-    time::{Duration, Instant},
+    collections::HashMap, fs::File, path::PathBuf, str::FromStr, time::{Duration, Instant}
 };
 
 use clap::Parser;
+use itertools::Itertools;
 use lz4::block::CompressionMode;
 use solana_accountsdb_compression_dictionary_utils::{
-    append_vec_iter, archived::ArchiveSnapshotExtractor, partial_pubkey::DictionaryMap,
-    SnapshotExtractor,
+    append_vec_iter, archived::ArchiveSnapshotExtractor, partial_pubkey_by_bits::PartialPubkeyByBits, SnapshotExtractor
 };
 
 #[derive(Parser, Debug)]
@@ -30,17 +27,23 @@ pub struct Args {
     pub max_number_of_accounts: Option<u64>,
 }
 
+type DictionaryMap = HashMap<PartialPubkeyByBits, Vec<u8>>;
+
 pub fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
     );
+
+    let args = Args::parse();
+
+    println!("tester args : {:?}", args);
 
     let Args {
         snapshot_archive_path,
         dictionary,
         lz4_compression,
         max_number_of_accounts,
-    } = Args::parse();
+    } = args;
     // loading dictionary
     let dictionary = match dictionary {
         Some(dictionary_path) => {
@@ -53,6 +56,8 @@ pub fn main() -> anyhow::Result<()> {
             DictionaryMap::new()
         }
     };
+    let any_key_in_dict = dictionary.keys().find_or_first(|_| true); // get any key
+    let nb_bits = any_key_in_dict.map(|x| x.nb_bits).unwrap_or_default();
 
     let archive_path = PathBuf::from_str(snapshot_archive_path.as_str()).unwrap();
 
@@ -83,7 +88,9 @@ pub fn main() -> anyhow::Result<()> {
                 total_size_uncompressed += stored.meta.data_len as usize;
                 continue;
             }
-            let dict_iter = dictionary.get(&stored.account_meta.owner.into());
+
+            let owner_partial_pubkey_by_bits = PartialPubkeyByBits::new(stored.account_meta.owner, nb_bits);
+            let dict_iter = dictionary.get(&owner_partial_pubkey_by_bits);
             account_total+=1;
             if account_total > max_number_of_accounts {
                 break;

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{de::Visitor, Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 
@@ -58,5 +56,3 @@ impl<const SIZE: usize, const OFFSET: usize> PartialPubkey<SIZE, OFFSET> {
         &self.0
     }
 }
-
-pub type DictionaryMap = HashMap<PartialPubkey<4>, Vec<u8>>;
