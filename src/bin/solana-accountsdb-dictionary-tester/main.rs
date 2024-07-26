@@ -74,10 +74,9 @@ pub fn main() -> anyhow::Result<()> {
     let mut time_compression: Duration = Duration::from_micros(0);
     let mut time_decompression: Duration = Duration::from_micros(0);
     let mut account_total: u64 = 0;
+    let mut compress_out_buffer = vec![0; 16 * 1024 * 1024]; // 16 MB buffer
 
     let max_number_of_accounts = max_number_of_accounts.unwrap_or(u64::MAX);
-    let max_account_size = 16 * 1024 * 1024;
-    let mut buf = vec![0; max_account_size]; // 64MB;
     for vec in loader.iter() {
         let append_vec = vec.unwrap();
         // info!("size: {:?}", append_vec.len());
@@ -102,38 +101,33 @@ pub fn main() -> anyhow::Result<()> {
                 Some(dict_data) => {
                     accounts_with_dict += 1;
                     let instant = Instant::now();
-                    match lz4_flex::block::compress_into_with_dict(
+                    let len = lz4_flex::block::compress_into_with_dict(
                         stored.data,
-                        buf.as_mut_slice(),
+                        &mut compress_out_buffer,
                         dict_data,
-                    ) {
-                        Ok(size) => {
-                            time_compression += instant.elapsed();
-                            total_size_compressed += size;
-                            total_size_uncompressed += stored.meta.data_len as usize;
-                            buf[..size].to_vec()
-                        }
-                        Err(e) => {
-                            log::error!(
-                                "error {e:?} compressing account of length {}",
-                                stored.meta.data_len
-                            );
-                            compression_errors += 1;
-                            continue;
-                        }
-                    }
+                    )
+                    .unwrap();
+                    time_compression += instant.elapsed();
+                    total_size_compressed += len;
+                    total_size_uncompressed += stored.meta.data_len as usize;
+                    compress_out_buffer[0..len].to_vec()
                 }
                 None => {
                     accounts_without_dict += 1;
                     let instant = Instant::now();
-                    let data = match lz4_compression {
+                    match lz4_compression {
                         Some(speed) => {
                             match lz4::block::compress(
                                 stored.data,
                                 Some(CompressionMode::FAST(speed)),
                                 true,
                             ) {
-                                Ok(data) => data,
+                                Ok(data) => {
+                                    time_compression += instant.elapsed();
+                                    total_size_compressed += data.len();
+                                    total_size_uncompressed += stored.meta.data_len as usize;
+                                    data
+                                }
                                 Err(e) => {
                                     log::error!("error lz4 compression {e:?}");
                                     compression_errors += 1;
@@ -141,26 +135,31 @@ pub fn main() -> anyhow::Result<()> {
                                 }
                             }
                         }
-                        None => lz4_flex::compress(stored.data),
-                    };
-                    time_compression += instant.elapsed();
-                    total_size_compressed += data.len();
-                    total_size_uncompressed += stored.meta.data_len as usize;
-                    data
+                        None => {
+                            let len =
+                                lz4_flex::compress_into(stored.data, &mut compress_out_buffer)
+                                    .unwrap();
+                            time_compression += instant.elapsed();
+                            total_size_compressed += len;
+                            total_size_uncompressed += stored.meta.data_len as usize;
+                            compress_out_buffer[..len].to_vec()
+                        }
+                    }
                 }
             };
 
+            let mut output = vec![0; stored.meta.data_len as usize];
             let decompressed = match dict_iter {
                 Some(dictionary) => {
                     let instant = Instant::now();
                     match lz4_flex::block::decompress_into_with_dict(
                         &compressed,
-                        buf.as_mut_slice(),
+                        &mut output,
                         dictionary,
                     ) {
-                        Ok(size) => {
+                        Ok(_) => {
                             time_decompression += instant.elapsed();
-                            buf[..size].to_vec()
+                            output
                         }
                         Err(_) => {
                             decompression_errors += 1;
@@ -185,10 +184,10 @@ pub fn main() -> anyhow::Result<()> {
                     }
                     None => {
                         let instant = Instant::now();
-                        match lz4_flex::decompress(&compressed, max_account_size) {
-                            Ok(data) => {
+                        match lz4_flex::decompress_into(&compressed, &mut output) {
+                            Ok(_data) => {
                                 time_decompression += instant.elapsed();
-                                data
+                                output
                             }
                             Err(e) => {
                                 log::error!(
@@ -205,12 +204,12 @@ pub fn main() -> anyhow::Result<()> {
             assert_eq!(decompressed, stored.data)
         }
     }
-    const ONE_MB : usize = 1024 * 1024;
+    const ONE_MB: usize = 1024 * 1024;
     println!(
         "After lz4 compression and decompression with dictionary \n \
      {total_size_compressed} - ({} MBs) total bytes for lz compressed data, \n \
-     {total_size_uncompressed} - ({} MBs) total bytes before compression, \n \
-     achieving compression ration of {}, \n \
+     {total_size_uncompressed} - ({} MBs) total bytes before compression, achieving\n \
+     {} ({}) compression ratio, \n \
      {} ms time required to compress all data, \n \
      {} ms to decompress all data, \n \
      {accounts_with_dict} accounts used dictionary, \n \
@@ -222,10 +221,11 @@ pub fn main() -> anyhow::Result<()> {
         total_size_compressed / ONE_MB,
         total_size_uncompressed / ONE_MB,
         (total_size_compressed as f64 / total_size_uncompressed as f64),
+        (total_size_uncompressed as f64 / total_size_compressed as f64),
         time_compression.as_millis(),
         time_decompression.as_millis(),
-        (total_size_uncompressed/ONE_MB) as f64/ (time_compression.as_millis() as f64),
-        (total_size_uncompressed/ONE_MB) as f64/ (time_decompression.as_millis() as f64),
+        (total_size_uncompressed / ONE_MB) as f64 / (time_compression.as_millis() as f64),
+        (total_size_uncompressed / ONE_MB) as f64 / (time_decompression.as_millis() as f64),
     );
 
     Ok(())
