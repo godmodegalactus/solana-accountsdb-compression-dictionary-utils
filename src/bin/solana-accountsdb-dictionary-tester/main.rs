@@ -14,6 +14,9 @@ use solana_accountsdb_compression_dictionary_utils::{
     partial_pubkey_by_bits::PartialPubkeyByBits, SnapshotExtractor,
 };
 
+#[global_allocator]
+static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
@@ -82,9 +85,7 @@ pub fn main() -> anyhow::Result<()> {
         // info!("size: {:?}", append_vec.len());
         for handle in append_vec_iter(&append_vec) {
             let stored = handle.access().unwrap();
-            if stored.meta.data_len < 8 {
-                total_size_compressed += stored.meta.data_len as usize;
-                total_size_uncompressed += stored.meta.data_len as usize;
+            if stored.meta.data_len < 64 {
                 continue;
             }
 
