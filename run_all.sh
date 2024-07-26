@@ -1,3 +1,5 @@
+export RUSTFLAGS="-C target-cpu=native"
+
 cargo run --release --bin solana-accountsdb-dictionary-tester -- -a mainnet.tar.zst
 
 echo "############################################ N = 0"
